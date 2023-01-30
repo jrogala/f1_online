@@ -123,7 +123,7 @@ end
 --     W3 = 19*60+1 + 15*60+1 + 12*60,
 -- }
 
-local min = 10
+local min = 120
 local timeStartSessionMarker = {
     Q1 = 1*min,
     W1 = 2*min,
