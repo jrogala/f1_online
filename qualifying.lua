@@ -122,11 +122,11 @@ end
 local min = 60
 local timeStartSessionMarker = {
     Q1 = 30,
-    W1 = 2*min,
-    Q2 = 2*min + 30,
-    W2 = 4*min,
-    Q3 = 4*min + 30,
-    W3 = 6*min,
+    W1 = 4*min,
+    Q2 = 4*min + 30,
+    W2 = 8*min,
+    Q3 = 8*min + 30,
+    W3 = 12*min,
 }
 
 local currentGoThrough = {
