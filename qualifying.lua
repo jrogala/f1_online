@@ -77,14 +77,14 @@ local function computeLeaderboardSession()
             if currentSessionCarsBestTime[k] == nil then -- Opponent did not put a lap
                 carsInFront = carsInFront + 1
             else
-                if ownBestLap >= currentSessionCarsBestTime[k] then -- opponent did a lap, but slower
+                if ownBestLap <= currentSessionCarsBestTime[k] then -- opponent did a lap, but slower
                     carsInFront = carsInFront + 1
                 end
             end
         end
     end
-    ac.debug("Computed position", carsInFront)
-    return carsInFront
+    ac.debug("Computed position", sim.carsCount - carsInFront)
+    return sim.carsCount - carsInFront
 end
 
 local currentPos = ac.OnlineEvent({
