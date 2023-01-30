@@ -46,10 +46,6 @@ local function debug_updateCarsTime()
 end
 
 local function updateCarsTime()
-    if DEBUG then
-        debug_updateCarsTime()
-        return
-    end
     for k=0, sim.carsCount-1 do
         car = ac.getCar(k)
         if car.lapCount > currentSessionCarsLapCount[k] then -- New Lap Registered
@@ -169,11 +165,9 @@ local function lock(sessionName)
             end
         end
     elseif sessionName == "W0" then
-        if not currentGoThrough.Q1 then
             -- Is locked
-            if not car.isInPitlane then
-                physics.setCarPenalty(ac.PenaltyType.TeleportToPits, 0)
-            end
+        if not car.isInPitlane then
+            physics.setCarPenalty(ac.PenaltyType.TeleportToPits, 0)
         end
     elseif sessionName == "W1" then
         if not currentGoThrough.Q2 then
