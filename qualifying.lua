@@ -252,7 +252,7 @@ function script.update(dt)
     elseif time < timeStartSessionMarker.Q2 then -- W1
         currentSession = "W1"
         if first then
-            if computeLeaderboardSession() <= 15 then
+            if computeLeaderboardSession() <= 2 then
                 currentGoThrough.Q2 = true
             else
                 send_currentPos()
@@ -273,7 +273,7 @@ function script.update(dt)
         currentSession = "W2"
         lock(currentSession)
         if not currentGoThrough.Q3 then
-            if computeLeaderboardSession() <= 10 then
+            if computeLeaderboardSession() <= 1 then
                 currentGoThrough.Q3 = true
             end
             updateCarsLapCount()
