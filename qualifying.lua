@@ -69,7 +69,7 @@ local function computeLeaderboardSession()
     local carsInFront = 0
     local ownBestLap = currentSessionCarsBestTime[0]
     if ownBestLap == nil then -- if user did not put a lap, he is always last
-        return 20
+        return sim.carsCount - 1
     end
     for k=0, sim.carsCount-1 do
         car = ac.getCar(k)
@@ -121,11 +121,11 @@ end
 
 local min = 120
 local timeStartSessionMarker = {
-    Q1 = 1*min,
+    Q1 = 30,
     W1 = 2*min,
-    Q2 = 3*min,
+    Q2 = 2*min + 30,
     W2 = 4*min,
-    Q3 = 5*min,
+    Q3 = 4*min + 30,
     W3 = 6*min,
 }
 
