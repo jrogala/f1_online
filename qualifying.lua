@@ -2,8 +2,7 @@ DEBUG = true
 local sim = ac.getSim()
 local cars = {}
 local pcar = ac.getCar(0)
-
-
+local plap = pcar.lapCount
 
 -- ON OFF TOGGLE FOR TEST
 local enable = false
@@ -41,119 +40,88 @@ ac.onSessionStart(function (sessionIndex, restarted)
 end)
 
 -- REAL SCRIPT
-
 local carsCount = sim.carsCount
-local currentSession = "" -- start, Q1, Q2, Q3, finish
+local currentSession = "" -- ST, Q1, Q2, Q3, EN
 
+
+-- Self info
+local bestTimeInfo = {Q1 = nil, Q2 = nil, Q3 = nil}
+
+-- RealTime leaderboard for everyone
 local leaderBoard = {}
 for i=0, carsCount-1 do
     car = ac.getCar(i)
     leaderBoard[i] = {
         index = car.index,
         name = ac.getDriverName(car.index),
-        time = nil,
-        Q1 = false,
-        Q2 = false,
-        Q3 = false,
-        pos = nil
+        Q1time = nil,
+        Q2time = nil,
+        Q3time = nil,
+        Q1pos = nil,
+        Q2pos = nil,
+        Q3pos = nil
     }
 end
 
-local function debug_leaderboard()
+local function debugLeaderboard()
     for i=0, carsCount-1 do
-        if leaderBoard[i].time ~= nil then
-            ac.debug("leaderboard_time_"..i, leaderBoard[i].time)
-        end
+        ac.debug("Q1: Car at pos "..i, leaderBoard[i].name)
     end
 end
 
-local currentSessionCarsLapCount = {}
-local function updateCarsLapCount()
-    for k=0, sim.carsCount-1 do
-        car = ac.getCar(k)
-        currentSessionCarsLapCount[k] = car.lapCount
-    end
-end
-
-local currentSessionCarsBestTime = {}
-
-local function debug_updateCarsTime()
-    currentSessionCarsBestTime[0] = 16
-    for k=1, sim.carsCount-1 do
-        car = ac.getCar(k)
-        currentSessionCarsBestTime[k] = k
-    end
-end
-
-local function updateCarsTime()
-    for k=0, sim.carsCount-1 do
-        car = ac.getCar(k)
-        if car.lapCount > currentSessionCarsLapCount[k] then -- New Lap Registered
-            if currentSessionCarsBestTime[k] == nil then -- no previous lap, register new lap
-                currentSessionCarsBestTime[k] = car.previousLapTimeMs
-            else -- check if new lap is better than the previous one
-                currentSessionCarsBestTime[k] = math.min(car.previousLapTimeMs, currentSessionCarsBestTime[k])
-            end
-        end
-    end
-end
-
-local function resetCarsBestTime()
-    for k=0, sim.carsCount-1 do
-        car = ac.getCar(k)
-        currentSessionCarsBestTime[k] = nil
-    end
-end
-
-local function computeLeaderboardSession()
-    local carSlower = 0
-    local ownBestLap = currentSessionCarsBestTime[0]
-    if ownBestLap == nil then -- if user did not put a lap, he is always last
-        return sim.carsCount
-    end
-    for k=0, sim.carsCount-1 do
-        car = ac.getCar(k)
-        if k ~= 0 then
-            if currentSessionCarsBestTime[k] == nil then -- Opponent did not put a lap
-                carSlower = carSlower + 1
+local function orderLeaderboard(sessionName)
+    if sessionName == "Q1" then
+        table.sort(leaderBoard, function (a, b)
+            if a.Q1time ~= nil and b.Q1time ~= nil then
+                return a.Q1time < b.Q1time
+            elseif a.Q1time ~= nil and b.Q1time == nil then
+                return true
+            elseif a.Q1time == nil and b.Q1time ~= nil then
+                return false
             else
-                if ownBestLap <= currentSessionCarsBestTime[k] then -- opponent did a lap, but slower
-                    carSlower = carSlower + 1
-                end
+                return a.name < b.name --TODO: better than alphabetical order
             end
+        end)
+        for i=0, carsCount-1 do
+            leaderBoard[i].Q1pos = i
         end
     end
-    ac.debug("Computed position", sim.carsCount - carSlower)
-    return sim.carsCount - carSlower
+    debugLeaderboard()
 end
 
-local currentPos = ac.OnlineEvent({
-    ac.StructItem.key('F1O_Position'),
-    pos = ac.StructItem.uint16(),
-    time = ac.StructItem.double(),
+local function currentPlace(sessionName)
+    for i=0, carsCount -1 do
+        if leaderBoard[i].index == 0 then
+            return leaderBoard[i].pos
+        end
+    end
+    ac.debug("HUGE ERROR", "ERROR")
+end
+
+
+local lapTime = ac.OnlineEvent({
+    ac.StructItem.key('F1O_sendLapTime'),
+    bestTimeQ1 = ac.StructItem.double(),
+    bestTimeQ2 = ac.StructItem.double(),
+    bestTimeQ3 = ac.StructItem.double(),
 }, function (sender, message)
-    local index = sender.index
-    leaderBoard[index].name = ac.getDriverName(index)
-    leaderBoard[index].time = message.time
-    leaderBoard[index].pos = message.pos
-    ac.debug("Got from "..sender.index, "time:"..tostring(message.time)..", pos:"..tostring(message.pos))
+    if message.bestTimeQ1 then
+        leaderBoard[sender.index].Q1time = message.bestTimeQ1
+        orderLeaderboard("Q1")
+    end
+    if message.bestTimeQ2 then
+        leaderBoard[sender.index].Q2time = message.bestTimeQ2
+        orderLeaderboard("Q2")
+    end
+    if message.bestTimeQ3 then
+        leaderBoard[sender.index].Q3time = message.bestTimeQ3
+        orderLeaderboard("Q3")
+    end
 end)
 
-local alreadySent = {Q1 = {pos = nil, time = nil}, Q2 = {pos = nil, time = nil}, Q3 = {pos = nil, time = nil}}
-local function send_currentPos()
-    local pos = computeLeaderboardSession()
-    local time = currentSessionCarsBestTime[0]
-    if currentSession == "Q1" or currentSession == "Q2" or currentSession == "Q3" then
-        if alreadySent[currentSession].pos ~= pos or alreadySent[currentSession].time ~= time then
-            if currentPos({pos = pos, time = time}, true) then
-                alreadySent[currentSession].pos = pos
-                alreadySent[currentSession].time = time
-                ac.debug("Position sent at sessuib "..tostring(currentSession), pos)
-            end
-        end
-    end
+local function send_lapTime()
+    lapTime({bestTimeInfo.Q1, bestTimeInfo.Q2, bestTimeInfo.Q3}, true)
 end
-
 
 -- local timeStartSessionMarker = {
 --     Q1 = 1*60,
@@ -167,67 +135,74 @@ end
 local min = 60
 local connectionTime = 1
 local overTime = 1
-local stbTime = 1
-local Q1time = 10
+local stbTime = .1
+local Q1time = 2
 local Q2time = 5
 local Q3time = 5
 
-local timeStartSessionMarker = {
+local timeEndSessionMarker = {
     start = connectionTime*min,
     Q1 = connectionTime*min + Q1time*min,
     Q1OT = connectionTime*min + Q1time*min + overTime*min,
     Q1END = connectionTime*min + Q1time*min + overTime*min + stbTime*min,
 }
 
-local currentGoThrough = {
-    Q1 = false,
-    Q2 = false,
-    Q3 = false,
-}
+local allowedOut = false
+local overtime = false
+local ending = false
 
 
 local function debug_currentGoThrough()
-    ac.debug("Allowed out Q1", currentGoThrough.Q1)
-    ac.debug("Allowed out Q2", currentGoThrough.Q2)
-    ac.debug("Allowed out Q3", currentGoThrough.Q3)
+    ac.debug("Allowed out", allowedOut)
 end
 
-local function lockInPit()
+local function lockInPit(currentSession)
     car = ac.getCar(0)
-    if not car.isInPitlane then
+    if not car.isInPitlane and not allowedOut then
         physics.setCarPenalty(ac.PenaltyType.TeleportToPits, 0)
     end
 end
 
 local function timeLeftSession(time)
-    if     currentSession == "W0" then
-        return timeStartSessionMarker.Q1 - time
+    if     currentSession == "ST" then
+        return timeEndSessionMarker.start - time
     elseif currentSession == "Q1" then
-        return timeStartSessionMarker.W1 - time
-    elseif currentSession == "W1" then
-        return timeStartSessionMarker.Q2 - time
-    elseif currentSession == "Q2" then
-        return timeStartSessionMarker.W2 - time
-    elseif currentSession == "W2" then
-        return timeStartSessionMarker.Q3 - time
-    elseif currentSession == "Q3" then
-        return timeStartSessionMarker.W3 - time
-    elseif currentSession == "W3" then
-        return 0
+        local remainingTime = timeEndSessionMarker.Q1 - time
+        if remainingTime >= 0 then
+            return remainingTime
+        else
+            return 0
+        end
+    end
+end
+
+local function onNewLap(car, currentSession)
+    plap = car.lapCount
+    if not pcar.isLastLapValid then -- last lap not valid so we remove it
+        return
+    end
+    local prevBestLap = bestTimeInfo[currentSession]
+    local currBestLap = pcar.previousLapTimeMs
+    if currBestLap < prevBestLap then
+        bestTimeInfo[currentSession] = currBestLap
+        send_lapTime()
+        orderLeaderboard("Q1")
     end
 end
 
 local first = true
-
 function script.update(dt)
     if not enable then
         return
     end
     local time = - sim.timeToSessionStart / 1000
+    local pcar = ac.getCar(0)
     if DEBUG then
-        debug_leaderboard()
         ac.debug("TimeLeft", timeLeftSession(time))
         ac.debug("CurrentSession", currentSession)
+        ac.debug("CurrentSession overtime", overtime)
+        ac.debug("CurrentSession ending", ending)
+        ac.debug("Allowed out", allowedOut)
         debug_currentGoThrough()
     end
     if (sim.raceSessionType ~= ac.SessionType.Qualify) and (sim.raceSessionType ~= ac.SessionType.Race) then
@@ -239,35 +214,88 @@ function script.update(dt)
         return
     end
 
-    if time < timeStartSessionMarker.start then -- before Q1
+    lockInPit()
+    -- CurrentSession update
+    if time < timeEndSessionMarker.start then -- before Q1
+        currentSession = "ST"
+        overtime = false
+        ending = false
+    elseif time < timeEndSessionMarker.Q1END then -- Q1
+        currentSession = "Q1"
+        if time < timeEndSessionMarker.Q1 then
+            overtime = false
+            ending = false
+        elseif time < timeEndSessionMarker.Q1OT then
+            overtime = true
+            ending = false
+        else
+            ending = true
+            overtime = false
+        end
+    -- elseif time < timeEndSessionMarker.Q2END then -- Q1
+    --     currentSession = "Q2" 
+    -- elseif time < timeEndSessionMarker.Q3END then -- Q1
+    --     currentSession = "Q3"
+    else
+        currentSession = "FI"
+    end
+
+    -- reset at start
+    if currentSession == "ST" then
+        allowedOut = false
         lockInPit()
-        updateCarsLapCount()
         physics.overrideRacingFlag(ac.FlagType.SessionSuspended)
     end
-    if time < timeStartSessionMarker.Q1 then -- Q1
-        currentSession = "Q1"
-        physics.overrideRacingFlag(ac.FlagTypeNone)
-    
-    elseif time < timeStartSessionMarker.Q1OT then
-        if first then
-            physics.overrideRacingFlag(ac.FlagType.Finished)
-            -- local lastLap = 
+    if currentSession == "Q1" then
+        if not overtime and not ending then
+            allowedOut = true
+            if pcar.isInPitlane then
+                physics.overrideRacingFlag(ac.FlagType.Start)
+            else
+                physics.overrideRacingFlag(ac.FlagTypeNone)
+            end
+            if pcar.lapCount > plap then -- new lap routine
+                onNewLap(pcar, currentSession)
+            end
         end
-
-    elseif time < timeStartSessionMarker.Q1END then
-        currentSession = "Wait"
-        physics.overrideRacingFlag(ac.FlagType.SessionSuspended)
-        lockInPit()
-        updateCarsLapCount()
-
+        if overtime then
+            if pcar.isInPitlane then
+                physics.overrideRacingFlag(ac.FlagType.SessionSuspended)
+            else
+                physics.overrideRacingFlag(ac.FlagType.OneLapLeft)
+            end
+            if pcar.lapCount > plap then -- new lap routine
+                allowedOut = false
+                onNewLap(pcar, currentSession)
+                physics.overrideRacingFlag(ac.FlagType.SessionSuspended)
+            end
+            lockInPit()
+            return
+        end
+        if ending then
+            allowedOut = false
+            if pcar.isInPitlane then
+                physics.overrideRacingFlag(ac.FlagType.SessionSuspended)
+            else
+                ac.debug("BIG ERROR", "SOMEONE ON TRACK DURING Q1END")
+                physics.overrideRacingFlag(ac.FlagType.SessionSuspended)
+            end
+            if first then
+                orderLeaderboard("Q1")
+                first = false
+                if currentPlace(currentSession) <= 15 then
+                    allowedOut = true
+                end
+                currentSession = "Wait"
+            end
+            lockInPit()
+            return
+        end
     end
 end
 
 function script.drawUI()
     if not enable then
         return
-    end
-    if currentSession == "W1" or currentSession == "W2" or currentSession == "W3" then
-        physics.overrideRacingFlag(ac.FlagType.Finished)
     end
 end
